@@ -53,19 +53,19 @@ Restart Hermes after installing the skill.
 
 ```bash
 export ACTUAL_SERVER_URL="https://actual.example.com"
-export ACTUAL_PASSWORD="your-actual-server-password"
-export ACTUAL_SYNC_ID="your-budget-sync-id"
+export ACTUAL_PASSWORD="replace-me"
+export ACTUAL_SYNC_ID="replace-me"
 ```
 
 Optional:
 
 ```bash
-export ACTUAL_ENCRYPTION_PASSWORD="your-budget-encryption-password"
+export ACTUAL_ENCRYPTION_PASSWORD="replace-me"
 export ACTUAL_DATA_DIR="$HOME/.cache/hermes/actual-budget"
 export ACTUAL_DEBT_PROFILE="$HOME/.hermes/state/actual-debt-profile.json"
 export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-ai-review.json"
 export ACTUAL_AI_BASE_URL="http://localhost:11434/v1"
-export ACTUAL_AI_API_KEY="ollama"
+export ACTUAL_AI_API_KEY="replace-me"
 export ACTUAL_AI_MODEL="qwen3.5:9b"
 ```
 

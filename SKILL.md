@@ -69,11 +69,11 @@ Use environment variables for secrets:
 
 ```bash
 export ACTUAL_SERVER_URL="https://actual.example.com"
-export ACTUAL_PASSWORD="..."
-export ACTUAL_SYNC_ID="..."
+export ACTUAL_PASSWORD="replace-me"
+export ACTUAL_SYNC_ID="replace-me"
 export ACTUAL_DATA_DIR="${ACTUAL_DATA_DIR:-$HOME/.cache/hermes/actual-budget}"
 # Optional, only if the Actual budget file has end-to-end encryption enabled:
-export ACTUAL_ENCRYPTION_PASSWORD="..."
+export ACTUAL_ENCRYPTION_PASSWORD="replace-me"
 # Optional, for self-signed or private CA TLS:
 export NODE_EXTRA_CA_CERTS="/path/to/ca.pem"
 ```
