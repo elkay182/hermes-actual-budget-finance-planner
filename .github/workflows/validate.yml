@@ -1,0 +1,39 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required files and SKILL.md frontmatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \
+            SKILL.md \
+            README.md \
+            AGENTS.md \
+            LICENSE \
+            examples/env.example \
+            examples/debt-profile.example.json \
+            scripts/install.sh; do
+            test -f "$path" || { echo "Missing required file: $path"; exit 1; }
+          done
+
+          head -n 1 SKILL.md | grep -qx -- '---'
+          grep -q '^name: actual-budget-finance-planner$' SKILL.md
+          grep -q '^description: ' SKILL.md
+          grep -q '^version: ' SKILL.md
+          grep -q '^---$' SKILL.md
+
+          if grep -Eiq '(ACTUAL_PASSWORD=.+[^"replace-me"]|sk-[A-Za-z0-9]|[0-9]{12,})' examples/env.example SKILL.md README.md; then
+            echo "Possible secret or private numeric identifier detected. Review before publishing."
+            exit 1
+          fi
+
+          echo "Validation passed"

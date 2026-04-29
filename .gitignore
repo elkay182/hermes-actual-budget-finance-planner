@@ -1,0 +1,7 @@
+.env
+*.local
+node_modules/
+.DS_Store
+.hermes/state/
+actual-debt-profile.json
+*.log
