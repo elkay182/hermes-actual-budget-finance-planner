@@ -2,7 +2,7 @@
 name: actual-budget-finance-planner
 description: Use Actual Budget's official Node.js API to analyze budgets, cash flow, spending, account balances, and debt payoff plans. Use for personal finance checkups, debt snowball planning, budget category adjustments, transaction review, and safe user-confirmed Actual Budget updates.
 version: 1.0.0
-author: Tony M. / ChatGPT
+author: elkay182 / ChatGPT
 license: MIT
 metadata:
   hermes:
