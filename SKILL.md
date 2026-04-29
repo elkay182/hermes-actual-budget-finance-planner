@@ -2,7 +2,7 @@
 name: actual-budget-finance-planner
 description: Use Actual Budget's official Node.js API to analyze budgets, cash flow, spending, account balances, and debt payoff plans. Use for personal finance checkups, debt snowball planning, budget category adjustments, transaction review, and safe user-confirmed Actual Budget updates.
 version: 1.0.0
-author: Tony M. / ChatGPT
+author: elkay182 / ChatGPT
 license: MIT
 metadata:
   hermes:
@@ -69,11 +69,11 @@ Use environment variables for secrets:
 
 ```bash
 export ACTUAL_SERVER_URL="https://actual.example.com"
-export ACTUAL_PASSWORD="..."
-export ACTUAL_SYNC_ID="..."
+export ACTUAL_PASSWORD="replace-me"
+export ACTUAL_SYNC_ID="replace-me"
 export ACTUAL_DATA_DIR="${ACTUAL_DATA_DIR:-$HOME/.cache/hermes/actual-budget}"
 # Optional, only if the Actual budget file has end-to-end encryption enabled:
-export ACTUAL_ENCRYPTION_PASSWORD="..."
+export ACTUAL_ENCRYPTION_PASSWORD="replace-me"
 # Optional, for self-signed or private CA TLS:
 export NODE_EXTRA_CA_CERTS="/path/to/ca.pem"
 ```
@@ -284,6 +284,60 @@ Analysis format:
 4. Uncategorized or suspicious items.
 5. Cash-flow opportunities to redirect toward debt.
 6. Recommended next action, with no more than 3 choices.
+
+## AI Categorization Review Sidecar
+
+Use this when the user asks Hermes to classify uncategorized transactions with an LLM. Keep Actual Budget read-only during classification unless the user explicitly confirms the proposed category updates.
+
+By default, track AI suggestions in a local sidecar file instead of adding tags or notes to Actual Budget transactions:
+
+```bash
+export ACTUAL_AI_REVIEW_PATH="${ACTUAL_AI_REVIEW_PATH:-$HOME/.hermes/state/actual-ai-review.json}"
+```
+
+Recommended sidecar shape:
+
+```json
+{
+  "version": 1,
+  "generated_at": "YYYY-MM-DDTHH:mm:ss.sssZ",
+  "budget_month": "YYYY-MM",
+  "items": [
+    {
+      "transaction_id": "actual-transaction-id-placeholder",
+      "date": "YYYY-MM-DD",
+      "amount_cents": 0,
+      "imported_payee": "Example Merchant",
+      "current_category": null,
+      "suggested_category": "Example Category",
+      "confidence": "high",
+      "reason": "Matched a repeated merchant pattern.",
+      "status": "pending"
+    }
+  ],
+  "proposed_categories": [
+    {
+      "name": "Example Category",
+      "group": "Example Group",
+      "example_transaction_ids": ["actual-transaction-id-placeholder"],
+      "reason": "Existing categories do not clearly fit this repeated spending pattern.",
+      "confidence": "medium",
+      "status": "pending"
+    }
+  ]
+}
+```
+
+Rules:
+
+- In dry-run mode, write or update only the sidecar file; do not mutate Actual Budget.
+- Do not add `#actual-ai`, `#actual-ai-miss`, or other audit markers to Actual Budget unless the user explicitly asks for in-budget markers.
+- Use `status` values such as `pending`, `approved`, `rejected`, and `needs_review`.
+- Apply category changes only for user-approved sidecar items, then call `api.sync()` and verify the changed transactions.
+- If a merchant is repeatedly approved for the same category, propose a narrow Actual Budget rule instead of repeatedly applying one-off changes.
+- Let the LLM propose new categories when no existing category fits, but store those proposals in `proposed_categories` with example transactions and a reason.
+- Create new categories only after showing the proposed category name, group, affected transactions, and getting explicit confirmation. Category creation must be a separate confirmed write before applying transaction category updates.
+- After creating a category, re-read Actual Budget categories to verify it exists before assigning transactions to it.
 
 ## Debt Profile Sidecar
 
@@ -547,7 +601,7 @@ Proposed Actual Budget changes:
 Confirm before I apply these changes.
 ```
 
-Write only after explicit confirmation:
+Write only after explicit confirmation, and keep the script dry-run by default. Set `ACTUAL_APPLY=true` only after the user confirms the proposed changes:
 
 ```bash
 cat > /tmp/actual_set_budget_amount.cjs <<'JS'
@@ -559,9 +613,7 @@ async function withActual(fn) {
   try {
     const encryption = process.env.ACTUAL_ENCRYPTION_PASSWORD ? { password: process.env.ACTUAL_ENCRYPTION_PASSWORD } : undefined;
     await api.downloadBudget(process.env.ACTUAL_SYNC_ID, encryption);
-    const result = await fn(api);
-    await api.sync();
-    return result;
+    return await fn(api);
   } finally {
     await api.shutdown();
   }
@@ -571,6 +623,7 @@ withActual(async api => {
   const month = process.env.ACTUAL_MONTH;
   const categoryName = process.env.ACTUAL_CATEGORY_NAME;
   const amount = Number(process.env.ACTUAL_BUDGET_AMOUNT);
+  const apply = process.env.ACTUAL_APPLY === 'true';
 
   if (!month || !categoryName || Number.isNaN(amount)) {
     throw new Error('Require ACTUAL_MONTH, ACTUAL_CATEGORY_NAME, and ACTUAL_BUDGET_AMOUNT');
@@ -578,11 +631,19 @@ withActual(async api => {
 
   const categoryId = await api.getIDByName('categories', categoryName);
   const amountInt = api.utils.amountToInteger(amount);
+  if (!apply) {
+    console.log(JSON.stringify({ dry_run: true, would_update: { month, categoryName, amount } }, null, 2));
+    return;
+  }
+
   await api.setBudgetAmount(month, categoryId, amountInt);
+  await api.sync();
   console.log(JSON.stringify({ updated: true, month, categoryName, amount }, null, 2));
 });
 JS
-ACTUAL_MONTH="2026-04" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="500.00" node /tmp/actual_set_budget_amount.cjs
+ACTUAL_MONTH="YYYY-MM" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="0.00" node /tmp/actual_set_budget_amount.cjs
+# After explicit user confirmation:
+ACTUAL_APPLY=true ACTUAL_MONTH="YYYY-MM" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="0.00" node /tmp/actual_set_budget_amount.cjs
 ```
 
 ## Transaction Import / Update Rules
@@ -598,17 +659,24 @@ For rules:
 - Create a rule only after showing the condition and action.
 - Avoid broad rules like “contains CARD” or “amount greater than 0” unless the user explicitly wants them.
 
-Example create-rule write operation after confirmation:
+Example create-rule workflow. First show the dry-run payload, then set `ACTUAL_APPLY=true` only after explicit confirmation:
 
 ```js
 const payeeId = await api.getIDByName('payees', 'Netflix');
 const categoryId = await api.getIDByName('categories', 'Subscriptions');
-await api.createRule({
+const rule = {
   stage: 'pre',
   conditionsOp: 'and',
   conditions: [{ field: 'payee', op: 'is', value: payeeId }],
   actions: [{ op: 'set', field: 'category', value: categoryId }],
-});
+};
+
+if (process.env.ACTUAL_APPLY !== 'true') {
+  console.log(JSON.stringify({ dry_run: true, would_create_rule: rule }, null, 2));
+  return;
+}
+
+await api.createRule(rule);
 await api.sync();
 ```
 
