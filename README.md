@@ -19,6 +19,7 @@ This skill helps Hermes perform read-only financial analysis by default, classif
   - classify uncategorized transactions with an LLM
   - dry-run before applying changes
   - track suggestions, confidence, and review status in a local sidecar file
+  - propose new categories when existing categories do not fit
   - keep Actual Budget transaction notes/tags unchanged unless explicitly requested
   - rerun previously missed or rejected transactions
   - suggest or create new categories after explicit confirmation

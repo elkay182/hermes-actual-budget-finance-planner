@@ -314,6 +314,16 @@ Recommended sidecar shape:
       "reason": "Matched a repeated merchant pattern.",
       "status": "pending"
     }
+  ],
+  "proposed_categories": [
+    {
+      "name": "Example Category",
+      "group": "Example Group",
+      "example_transaction_ids": ["actual-transaction-id-placeholder"],
+      "reason": "Existing categories do not clearly fit this repeated spending pattern.",
+      "confidence": "medium",
+      "status": "pending"
+    }
   ]
 }
 ```
@@ -325,7 +335,9 @@ Rules:
 - Use `status` values such as `pending`, `approved`, `rejected`, and `needs_review`.
 - Apply category changes only for user-approved sidecar items, then call `api.sync()` and verify the changed transactions.
 - If a merchant is repeatedly approved for the same category, propose a narrow Actual Budget rule instead of repeatedly applying one-off changes.
-- Create new categories only after showing the proposed category name, group, affected transactions, and getting explicit confirmation.
+- Let the LLM propose new categories when no existing category fits, but store those proposals in `proposed_categories` with example transactions and a reason.
+- Create new categories only after showing the proposed category name, group, affected transactions, and getting explicit confirmation. Category creation must be a separate confirmed write before applying transaction category updates.
+- After creating a category, re-read Actual Budget categories to verify it exists before assigning transactions to it.
 
 ## Debt Profile Sidecar
 
