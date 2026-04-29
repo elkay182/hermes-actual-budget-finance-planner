@@ -18,9 +18,9 @@ This skill helps Hermes perform read-only financial analysis by default, classif
 - Provides `actual-ai`-style workflows:
   - classify uncategorized transactions with an LLM
   - dry-run before applying changes
-  - tag guesses with `#actual-ai`
-  - tag misses with `#actual-ai-miss`
-  - rerun missed transactions
+  - track suggestions, confidence, and review status in a local sidecar file
+  - keep Actual Budget transaction notes/tags unchanged unless explicitly requested
+  - rerun previously missed or rejected transactions
   - suggest or create new categories after explicit confirmation
   - optionally sync before classification
   - optionally use merchant web search for ambiguous payees
@@ -62,6 +62,7 @@ Optional:
 export ACTUAL_ENCRYPTION_PASSWORD="your-budget-encryption-password"
 export ACTUAL_DATA_DIR="$HOME/.cache/hermes/actual-budget"
 export ACTUAL_DEBT_PROFILE="$HOME/.hermes/state/actual-debt-profile.json"
+export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-ai-review.json"
 export ACTUAL_AI_BASE_URL="http://localhost:11434/v1"
 export ACTUAL_AI_API_KEY="ollama"
 export ACTUAL_AI_MODEL="qwen3.5:9b"
@@ -101,7 +102,8 @@ Mode: dry-run
 Use the actual-budget-finance-planner skill.
 
 Classify uncategorized transactions using LLM classification.
-Tag guesses with #actual-ai and uncertain items with #actual-ai-miss.
+Track suggestions in the local AI review sidecar.
+Do not add tags or notes to Actual Budget transactions.
 Do not apply changes yet.
 
 Mode: dry-run
