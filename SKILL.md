@@ -547,7 +547,7 @@ Proposed Actual Budget changes:
 Confirm before I apply these changes.
 ```
 
-Write only after explicit confirmation:
+Write only after explicit confirmation, and keep the script dry-run by default. Set `ACTUAL_APPLY=true` only after the user confirms the proposed changes:
 
 ```bash
 cat > /tmp/actual_set_budget_amount.cjs <<'JS'
@@ -571,6 +571,7 @@ withActual(async api => {
   const month = process.env.ACTUAL_MONTH;
   const categoryName = process.env.ACTUAL_CATEGORY_NAME;
   const amount = Number(process.env.ACTUAL_BUDGET_AMOUNT);
+  const apply = process.env.ACTUAL_APPLY === 'true';
 
   if (!month || !categoryName || Number.isNaN(amount)) {
     throw new Error('Require ACTUAL_MONTH, ACTUAL_CATEGORY_NAME, and ACTUAL_BUDGET_AMOUNT');
@@ -578,11 +579,18 @@ withActual(async api => {
 
   const categoryId = await api.getIDByName('categories', categoryName);
   const amountInt = api.utils.amountToInteger(amount);
+  if (!apply) {
+    console.log(JSON.stringify({ dry_run: true, would_update: { month, categoryName, amount } }, null, 2));
+    return;
+  }
+
   await api.setBudgetAmount(month, categoryId, amountInt);
   console.log(JSON.stringify({ updated: true, month, categoryName, amount }, null, 2));
 });
 JS
-ACTUAL_MONTH="2026-04" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="500.00" node /tmp/actual_set_budget_amount.cjs
+ACTUAL_MONTH="YYYY-MM" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="0.00" node /tmp/actual_set_budget_amount.cjs
+# After explicit user confirmation:
+ACTUAL_APPLY=true ACTUAL_MONTH="YYYY-MM" ACTUAL_CATEGORY_NAME="Debt Paydown" ACTUAL_BUDGET_AMOUNT="0.00" node /tmp/actual_set_budget_amount.cjs
 ```
 
 ## Transaction Import / Update Rules
@@ -598,17 +606,24 @@ For rules:
 - Create a rule only after showing the condition and action.
 - Avoid broad rules like “contains CARD” or “amount greater than 0” unless the user explicitly wants them.
 
-Example create-rule write operation after confirmation:
+Example create-rule workflow. First show the dry-run payload, then set `ACTUAL_APPLY=true` only after explicit confirmation:
 
 ```js
 const payeeId = await api.getIDByName('payees', 'Netflix');
 const categoryId = await api.getIDByName('categories', 'Subscriptions');
-await api.createRule({
+const rule = {
   stage: 'pre',
   conditionsOp: 'and',
   conditions: [{ field: 'payee', op: 'is', value: payeeId }],
   actions: [{ op: 'set', field: 'category', value: categoryId }],
-});
+};
+
+if (process.env.ACTUAL_APPLY !== 'true') {
+  console.log(JSON.stringify({ dry_run: true, would_create_rule: rule }, null, 2));
+  return;
+}
+
+await api.createRule(rule);
 await api.sync();
 ```
 
