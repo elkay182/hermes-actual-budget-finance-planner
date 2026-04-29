@@ -285,14 +285,14 @@ Analysis format:
 5. Cash-flow opportunities to redirect toward debt.
 6. Recommended next action, with no more than 3 choices.
 
-## AI Categorization Review Sidecar
+## LLM Categorization Review Sidecar
 
 Use this when the user asks Hermes to classify uncategorized transactions with an LLM. Keep Actual Budget read-only during classification unless the user explicitly confirms the proposed category updates.
 
-By default, track AI suggestions in a local sidecar file instead of adding tags or notes to Actual Budget transactions:
+By default, track LLM suggestions in a local sidecar file instead of adding tags or notes to Actual Budget transactions:
 
 ```bash
-export ACTUAL_AI_REVIEW_PATH="${ACTUAL_AI_REVIEW_PATH:-$HOME/.hermes/state/actual-ai-review.json}"
+export ACTUAL_AI_REVIEW_PATH="${ACTUAL_AI_REVIEW_PATH:-$HOME/.hermes/state/actual-llm-review.json}"
 ```
 
 Recommended sidecar shape:
@@ -331,7 +331,7 @@ Recommended sidecar shape:
 Rules:
 
 - In dry-run mode, write or update only the sidecar file; do not mutate Actual Budget.
-- Do not add `#actual-ai`, `#actual-ai-miss`, or other audit markers to Actual Budget unless the user explicitly asks for in-budget markers.
+- Do not add audit tags, notes, or other review markers to Actual Budget unless the user explicitly asks for in-budget markers.
 - Use `status` values such as `pending`, `approved`, `rejected`, and `needs_review`.
 - Apply category changes only for user-approved sidecar items, then call `api.sync()` and verify the changed transactions.
 - If a merchant is repeatedly approved for the same category, propose a narrow Actual Budget rule instead of repeatedly applying one-off changes.

@@ -2,7 +2,7 @@
 
 A Hermes Agent skill for managing finances with [Actual Budget](https://actualbudget.org/) using the official `@actual-app/api` Node.js automation package.
 
-This skill helps Hermes perform read-only financial analysis by default, classify transactions in an `actual-ai`-style workflow, and build debt payoff plans using snowball, avalanche, hybrid, Cash Flow Index, and debt-ratio / DTI impact methods.
+This skill helps Hermes perform read-only financial analysis by default, classify transactions with an optional LLM-assisted review workflow, and build debt payoff plans using snowball, avalanche, hybrid, Cash Flow Index, and debt-ratio / DTI impact methods.
 
 ## What it does
 
@@ -15,7 +15,7 @@ This skill helps Hermes perform read-only financial analysis by default, classif
   - Cash Flow Index (CFI)
   - debt-ratio / DTI impact
   - custom manual priority
-- Provides `actual-ai`-style workflows:
+- Provides LLM-assisted categorization workflows:
   - classify uncategorized transactions with an LLM
   - dry-run before applying changes
   - track suggestions, confidence, and review status in a local sidecar file
@@ -63,7 +63,7 @@ Optional:
 export ACTUAL_ENCRYPTION_PASSWORD="replace-me"
 export ACTUAL_DATA_DIR="$HOME/.cache/hermes/actual-budget"
 export ACTUAL_DEBT_PROFILE="$HOME/.hermes/state/actual-debt-profile.json"
-export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-ai-review.json"
+export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-llm-review.json"
 export ACTUAL_AI_BASE_URL="http://localhost:11434/v1"
 export ACTUAL_AI_API_KEY="replace-me"
 export ACTUAL_AI_MODEL="qwen3.5:9b"
@@ -103,7 +103,7 @@ Mode: dry-run
 Use the actual-budget-finance-planner skill.
 
 Classify uncategorized transactions using LLM classification.
-Track suggestions in the local AI review sidecar.
+Track suggestions in the local LLM review sidecar.
 Do not add tags or notes to Actual Budget transactions.
 Do not apply changes yet.
 
