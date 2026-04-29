@@ -559,9 +559,7 @@ async function withActual(fn) {
   try {
     const encryption = process.env.ACTUAL_ENCRYPTION_PASSWORD ? { password: process.env.ACTUAL_ENCRYPTION_PASSWORD } : undefined;
     await api.downloadBudget(process.env.ACTUAL_SYNC_ID, encryption);
-    const result = await fn(api);
-    await api.sync();
-    return result;
+    return await fn(api);
   } finally {
     await api.shutdown();
   }
@@ -585,6 +583,7 @@ withActual(async api => {
   }
 
   await api.setBudgetAmount(month, categoryId, amountInt);
+  await api.sync();
   console.log(JSON.stringify({ updated: true, month, categoryName, amount }, null, 2));
 });
 JS
