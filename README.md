@@ -70,10 +70,9 @@ export ACTUAL_ENCRYPTION_PASSWORD="replace-me"
 export ACTUAL_DATA_DIR="$HOME/.cache/hermes/actual-budget"
 export ACTUAL_DEBT_PROFILE="$HOME/.hermes/state/actual-debt-profile.json"
 export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-llm-review.json"
-export ACTUAL_AI_BASE_URL="http://localhost:11434/v1"
-export ACTUAL_AI_API_KEY="replace-me"
-export ACTUAL_AI_MODEL="replace-me"
 ```
+
+Hermes performs LLM-assisted categorization directly. You do not need to configure a separate LLM endpoint for the default workflow. If you want to delegate categorization to an external model, use a custom script and keep writes dry-run by default.
 
 See [`examples/env.example`](examples/env.example).
 
