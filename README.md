@@ -34,12 +34,17 @@ This skill helps Hermes perform read-only financial analysis by default, classif
 
 ## Install
 
-Clone this repository, then copy the skill into Hermes' skills directory:
+Clone this repository, then copy the skill into Hermes' skills directory. Copy the whole skill support set so linked reference docs and examples remain available:
 
 ```bash
 git clone https://github.com/elkay182/hermes-actual-budget-finance-planner.git
 mkdir -p ~/.hermes/skills/actual-budget-finance-planner
 cp hermes-actual-budget-finance-planner/SKILL.md ~/.hermes/skills/actual-budget-finance-planner/SKILL.md
+for dir in references examples scripts docs; do
+  if [ -d "hermes-actual-budget-finance-planner/$dir" ]; then
+    cp -R "hermes-actual-budget-finance-planner/$dir" ~/.hermes/skills/actual-budget-finance-planner/
+  fi
+done
 ```
 
 Or install directly from a local checkout:
@@ -126,6 +131,10 @@ This skill is for educational budgeting support. It does not provide fiduciary, 
 ├── examples/
 │   ├── debt-profile.example.json
 │   └── env.example
+├── references/
+│   ├── due-date-inference.md
+│   ├── payoff-methods.md
+│   └── session-due-date-inference.md
 ├── scripts/
 │   └── install.sh
 └── docs/

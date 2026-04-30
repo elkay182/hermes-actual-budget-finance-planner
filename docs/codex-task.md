@@ -10,11 +10,7 @@ Prepare and publish this repository as a clean, safe, GitHub-hosted Hermes Agent
 2. Verify `README.md` accurately describes installation, required environment variables, example prompts, and safety model.
 3. Verify `examples/env.example` contains only placeholder values.
 4. Verify `examples/debt-profile.example.json` contains only placeholder values and no private financial data.
-5. Verify `scripts/install.sh` installs to:
-
-   ```bash
-   ~/.hermes/skills/actual-budget-finance-planner/SKILL.md
-   ```
+5. Verify `scripts/install.sh` installs `SKILL.md` to `~/.hermes/skills/actual-budget-finance-planner/SKILL.md` and copies linked support directories such as `references/`, `examples/`, `scripts/`, and `docs/` when present.
 
 6. Confirm all write-capable Actual Budget workflows remain dry-run by default and require explicit confirmation.
 7. Add or improve tests/linting only if it does not complicate the repo.
