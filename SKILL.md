@@ -863,7 +863,7 @@ When running scripts from Hermes's terminal tool:
 
 ## Due Date Inference
 
-Actual Budget does not store due dates natively. When the sidecar's `due_day` is null or stale, infer it from transaction history rather than guessing. See `references/session-due-date-inference.md` for worked examples.
+Actual Budget does not store due dates natively. When the sidecar's `due_day` is null or stale, infer it from transaction history rather than guessing. See `references/due-date-inference.md` for generic worked examples.
 
 1. Pull 6+ months of transactions for each debt account.
 2. Filter for inbound (positive amount) transactions — these are payments made TO the account.

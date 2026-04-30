@@ -19,6 +19,6 @@ This repository contains a Hermes Agent skill for Actual Budget finance workflow
 
 - `SKILL.md` has valid YAML frontmatter.
 - `SKILL.md` contains no private data.
-- Installation instructions copy `SKILL.md` into `~/.hermes/skills/actual-budget-finance-planner/SKILL.md`.
+- Installation instructions copy `SKILL.md` into `~/.hermes/skills/actual-budget-finance-planner/SKILL.md` and preserve linked support directories such as `references/`, `examples/`, `scripts/`, and `docs/` when present.
 - Examples use placeholders for environment variables.
 - Any write-capable workflow has a dry-run path and explicit confirmation path.

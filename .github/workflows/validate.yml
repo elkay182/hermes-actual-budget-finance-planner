@@ -21,6 +21,9 @@ jobs:
             LICENSE \
             examples/env.example \
             examples/debt-profile.example.json \
+            references/due-date-inference.md \
+            references/payoff-methods.md \
+            references/session-due-date-inference.md \
             scripts/install.sh; do
             test -f "$path" || { echo "Missing required file: $path"; exit 1; }
           done
@@ -31,9 +34,38 @@ jobs:
           grep -q '^version: ' SKILL.md
           grep -q '^---$' SKILL.md
 
-          if grep -Eiq '(ACTUAL_PASSWORD=.+[^"replace-me"]|sk-[A-Za-z0-9]|[0-9]{12,})' examples/env.example SKILL.md README.md; then
-            echo "Possible secret or private numeric identifier detected. Review before publishing."
-            exit 1
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, sys
+
+          files = [
+              Path('SKILL.md'),
+              Path('README.md'),
+              Path('examples/env.example'),
+              Path('examples/debt-profile.example.json'),
+              Path('references/due-date-inference.md'),
+              Path('references/payoff-methods.md'),
+              Path('references/session-due-date-inference.md'),
+          ]
+          patterns = {
+              'uuid': re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'),
+              'private_url': re.compile(r'https?://(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)'),
+              'actual_secret_assignment': re.compile(r'ACTUAL_(?:PASSWORD|SYNC_ID|SESSION|TOKEN|API_KEY)\s*=\s*["\']?([^"\'\n#]+)'),
+          }
+          findings = []
+          for path in files:
+              text = path.read_text(errors='ignore')
+              for name, pattern in patterns.items():
+                  for match in pattern.finditer(text):
+                      value = match.group(0).lower()
+                      allowed = any(token in value for token in ['replace-me', 'example', 'placeholder', '***'])
+                      if not allowed:
+                          line = text[:match.start()].count('\n') + 1
+                          findings.append(f'{path}:{line}: {name}: {match.group(0)[:80]}')
+          if findings:
+              print('Possible secret or private identifier detected:')
+              print('\n'.join(findings))
+              sys.exit(1)
+          PY
 
           echo "Validation passed"
