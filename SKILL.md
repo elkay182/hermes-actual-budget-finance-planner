@@ -44,7 +44,7 @@ This skill uses Actual Budget's official Node.js package, `@actual-app/api`. Act
 5. If Actual Budget does not store a needed debt field, ask for it or use a local sidecar JSON file.
 6. Before any write operation, show the exact proposed changes and get explicit user confirmation.
 7. Do not initiate real-world payments, transfers, investing trades, or creditor interactions. Actual Budget can track planned and completed activity; it cannot replace the user's bank or lender.
-8. Prefer debt elimination, emergency cash protection, and recurring-expense clarity over aggressive optimization.
+8. Prefer debt elimination, emergency cash protection, and recurring‑expense clarity over aggressive optimization. **For dry‑run requests, set `ACTUAL_APPLY=false` and execute the provided script from `/tmp`; no changes are made unless the user explicitly confirms and `ACTUAL_APPLY=true` is set**.
 9. When analyzing debt, always distinguish:
    - recorded Actual account balance
    - statement balance
@@ -120,12 +120,45 @@ function cents(decimalAmount) {
 
 Actual stores currency amounts as integers with no decimal places. In USD-style currencies, store a dollar amount as integer cents, not as a decimal string. Dates are `YYYY-MM-DD`; months are `YYYY-MM`.
 
+## Actual API Shape Notes / Source of Truth
+
+Observed API shape can differ from examples in older docs. Verify shape before doing calculations.
+
+- `api.getAccounts()` may not include `type`; do not rely on `acct.type` for debt/cash classification. Use account names plus the debt sidecar (`actual-debt-profile.json`) when available.
+- `api.getBudgetMonth(month)` returns monthly budget data under `budget.categoryGroups`, not `budget.categories`.
+- Category rows inside `budget.categoryGroups[].categories[]` use:
+  - `budgeted` for assigned/budgeted amount
+  - `spent` for monthly category activity
+  - `balance` for available/remaining amount
+- For monthly spending by category and cash-flow by category, prefer `getBudgetMonth(month).categoryGroups[].categories[].spent/balance`. This avoids double-counting payments/transfers between on-budget accounts.
+- Use `getTransactions()` for payee review, uncategorized samples, subscription detection, and transaction-level auditing — not as the primary category-spend total unless you explicitly filter transfers and account-payment rows.
+
+Example category cash-flow extraction:
+
+```js
+const budget = await api.getBudgetMonth(month);
+const categoryRows = [];
+for (const group of budget.categoryGroups || []) {
+  for (const cat of group.categories || []) {
+    if (cat.hidden || cat.is_income) continue;
+    categoryRows.push({
+      group: group.name,
+      name: cat.name,
+      budgeted: dollars(cat.budgeted || 0),
+      spent: dollars(cat.spent || 0),
+      available: dollars(cat.balance || 0),
+    });
+  }
+}
+```
+
 ## Read-Only Financial Snapshot
 
 Use this first for most finance questions.
 
 ```bash
 cat > /tmp/actual_snapshot.cjs <<'JS'
+const fs = require('fs');
 const api = require('@actual-app/api');
 
 async function withActual(fn) {
@@ -162,37 +195,70 @@ withActual(async api => {
     });
   }
 
+  /**
+   * CRITICAL: getBudgetMonth() returns categoryGroups, NOT a flat categories dict.
+   * budget.categories is EMPTY. Use budget.categoryGroups[].categories instead.
+   * Each category entry in categoryGroups has: id, name, budgeted, spent,
+   * balance, carryover, hidden, and is_income.
+   */
   const budget = await api.getBudgetMonth(month);
   const categories = await api.getCategories();
   const groups = await api.getCategoryGroups();
   const payees = await api.getPayees();
 
-  console.log(JSON.stringify({
+  // Extract budget category rows from categoryGroups (the actual source of truth)
+  const budgetByCatId = {};
+  for (const group of (budget.categoryGroups || [])) {
+    for (const cat of (group.categories || [])) {
+      budgetByCatId[cat.id] = {
+        budgeted: cat.budgeted,
+        spent: cat.spent,
+        balance: cat.balance,
+        group: group.name,
+      };
+    }
+  }
+
+  // Use fs.writeFileSync to avoid breadcrumb corruption (see Pitfalls)
+  fs.writeFileSync('/tmp/actual_snapshot.json', JSON.stringify({
     month,
     generated_at: new Date().toISOString(),
     accounts: balances,
     categories,
     category_groups: groups,
+    category_budgets: budgetByCatId,
+    budget_summary: {
+      income_available: dollars(budget.incomeAvailable),
+      to_budget: dollars(budget.toBudget),
+      total_budgeted: dollars(budget.totalBudgeted),
+      total_spent: dollars(budget.totalSpent),
+      total_balance: dollars(budget.totalBalance),
+    },
     payee_count: payees.length,
-    budget_month: budget,
   }, null, 2));
 });
 JS
-node /tmp/actual_snapshot.cjs > /tmp/actual_snapshot.json
+node /tmp/actual_snapshot.cjs
 cat /tmp/actual_snapshot.json
 ```
 
 When summarizing the snapshot:
 
+- Use `budget.categoryGroups` to iterate over groups and their categories. Do NOT access `budget.categories` directly — it is empty. Each group has a `categories` array where each category entry includes `budgeted`, `spent`, and `balance` amounts in integer cents.
+- Build a lookup from category ID to budgeted/spent/balance amounts by extracting from `categoryGroups` before doing any spending analysis.
+
 - Separate cash/checking/savings from liabilities.
 - Show raw Actual balances if liability sign is unclear.
 - Exclude closed accounts unless the user asks for historical analysis.
-- Do not assume an account is a debt solely from its name; prefer `type` values such as `credit`, `debt`, or `mortgage`, then ask the user to verify.
+- Do not assume `api.getAccounts()` includes `type`; some Actual API versions return account names/balances without type metadata.
+- If `acct.type` is missing, classify cash/debt using account names plus the debt sidecar, and clearly label classification as inferred.
 - Call out missing debt fields that Actual does not inherently store, especially APR and minimum payment.
 
 ## Spending Review
 
 Use this to identify categories, payees, subscriptions, and unusual spend.
+
+Important: category-level monthly spending should come from `api.getBudgetMonth(month).categoryGroups[].categories[].spent`, not from summing all negative transactions across all accounts. Summing all negative transactions can double-count credit-card payments, debt transfers, and other account-to-account activity. Use transactions for payee-level review and uncategorized samples.
 
 ```bash
 cat > /tmp/actual_spending_review.cjs <<'JS'
@@ -222,10 +288,11 @@ function monthBounds(month) {
 withActual(async api => {
   const month = process.env.ACTUAL_MONTH || new Date().toISOString().slice(0, 7);
   const { start, end } = monthBounds(month);
-  const [accounts, categories, payees] = await Promise.all([
+  const [accounts, categories, payees, budget] = await Promise.all([
     api.getAccounts(),
     api.getCategories(),
     api.getPayees(),
+    api.getBudgetMonth(month),
   ]);
 
   const categoryById = new Map(categories.map(c => [c.id, c]));
@@ -238,14 +305,18 @@ withActual(async api => {
   }
 
   const byCategory = new Map();
+  for (const group of budget.categoryGroups || []) {
+    for (const cat of group.categories || []) {
+      if (cat.hidden || cat.is_income) continue;
+      if ((cat.spent || 0) < 0) byCategory.set(cat.name, cat.spent || 0);
+    }
+  }
   const byPayee = new Map();
   const uncategorized = [];
 
   for (const t of txns) {
     if (t.amount >= 0) continue; // expense-only summary
-    const categoryName = categoryById.get(t.category)?.name || '(Uncategorized)';
     const payeeName = payeeById.get(t.payee)?.name || t.payee_name || t.imported_payee || '(Unknown Payee)';
-    byCategory.set(categoryName, (byCategory.get(categoryName) || 0) + t.amount);
     byPayee.set(payeeName, (byPayee.get(payeeName) || 0) + t.amount);
     if (!t.category) uncategorized.push(t);
   }
@@ -468,7 +539,9 @@ function simulate(inputDebts, monthlyExtra, orderMethod) {
   // CRITICAL: Split into active targets (interest-bearing, non-mortgage) and passive (min only)
   // Paying mortgage or 0% accounts ahead of 22% credit cards is mathematically wrong.
   const passive = inputDebts.filter(d =>
-    d.debt_type === 'mortgage' || (d.apr === 0 && !d.promo_apr)
+    d.debt_type === 'mortgage' ||
+    (d.apr === 0 && (d.promo_apr == null || d.promo_apr === 0)) ||
+    (d.promo_apr === 0 && d.promo_end_date && new Date(d.promo_end_date) > new Date())
   );
   const activeTargets = inputDebts.filter(d => !passive.includes(d));
 
@@ -492,15 +565,17 @@ function simulate(inputDebts, monthlyExtra, orderMethod) {
     }
 
     const sorted = sortDebts(debts.filter(d => d.balance_cents > 0), orderMethod);
-    let pool = monthlyExtra;
+    let pool = monthlyExtra + sorted.reduce((sum, d) => sum + (d.minimum_payment_cents || 0), 0);
 
+    // Pay minimums on every active debt first.
     for (const target of sorted) {
-      if (pool <= 0) break;
-      const min = target.minimum_payment_cents || 0;
-      pool -= min;
+      if (target.balance_cents <= 0) continue;
+      const min = Math.min(target.balance_cents, target.minimum_payment_cents || 0);
       target.balance_cents -= min;
+      pool -= min;
     }
 
+    // Then send remaining pool to the current priority debt.
     while (pool > 0) {
       const priority = sorted.find(d => d.balance_cents > 0);
       if (!priority) break;
@@ -597,6 +672,8 @@ withActual(async api => {
       promo_apr: d.promo_apr,
       promo_end_date: d.promo_end_date,
       due_day: d.due_day,
+      debt_type: d.debt_type || null,
+      secured: d.secured ?? null,
       notes: d.notes,
     });
   }
@@ -858,7 +935,7 @@ After any write operation:
 When running scripts from Hermes's terminal tool:
 - **Always write Node.js to a `.cjs` file first**, then execute it. Inline `-e` scripts with `@actual-app/api` regularly time out because `downloadBudget()` and `sync()` need extra seconds to fetch and sync data from the server — the terminal's timeout limit may fire before the async work completes.
 - Use a generous `timeout` (60–120s) on `terminal` calls that run actual-budget scripts.
-- API breadcrumbs (sync messages) go to stderr; JSON output goes to stdout. Both appear in the terminal output — parse the JSON object at the end, not the breadcrumbs at the beginning.
+- API breadcrumbs (sync messages) can go to stdout and stderr. Do not parse JSON from stdout directly. Write JSON to a file with `fs.writeFileSync('/tmp/result.json', JSON.stringify(data))`, print only a small completion marker, then read the JSON file.
 - Always call `api.shutdown()` in a `finally` block to release the in-memory database lock, even on errors.
 
 ## Due Date Inference
@@ -886,7 +963,7 @@ const inferredDueDay = sortedDays[0][0]; // most frequent payment day
 ## Common Pitfalls
 
 - Actual Budget automation is via `@actual-app/api`, not a REST API.
-- Terminal timeout gotchas: **always write Node.js to a `.cjs` file first**, *not inline with `\-e`*. The `downloadBudget()` fetch + `sync()` roundtrip easily exceeds inline timeouts. Execute via `node /path/to/script.cjs`.
+- Terminal timeout gotchas: **always write Node.js to a `.cjs` file first**, *not inline with `\ -e`*. The `downloadBudget()` fetch + `sync()` roundtrip easily exceeds inline timeouts. Execute via `node /path/to/script.cjs`.
 - Amounts are integer minor units. Do not write decimal dollar amounts directly to `setBudgetAmount`, transactions, or balances.
 - `importTransactions` deduplicates and runs rules; `addTransactions` does not.
 - Existing transfer `transfer_id` values should not be changed.
@@ -896,3 +973,33 @@ const inferredDueDay = sortedDays[0][0]; // most frequent payment day
 - **Never use `node -e "..."` for Actual Budget scripts** — inline eval scripts consistently timeout on this host. Always write the script to a `/tmp/` file and execute it with `node /tmp/script.cjs`.
 - **Always set `ACTUAL_DATA_DIR`** even if the default works — explicit paths prevent stale cache conflicts when multiple sessions run the API.
 - **Handle zero-payment accounts gracefully** — not all debt accounts will have payment history (user may pay externally). Do not crash on `sortedDays[0]` being undefined; log "NO payment transactions found" and flag for user input.
+- **Breadcrumb contamination**: `@actual-app/api` writes sync breadcrumbs to BOTH stdout and stderr (not just stderr). If your script writes JSON to stdout, the breadcrumbs will corrupt the JSON. **Fix**: use `fs.writeFileSync('/tmp/result.json', JSON.stringify(data))` in the Node script and read the file from Python instead of parsing stdout. Example pattern:
+
+```js
+// In your .cjs script — do NOT console.log(JSON.stringify(result))
+fs.writeFileSync('/tmp/actual_result.json', JSON.stringify(result, null, 2));
+process.stdout.write('DONE\n');
+```
+
+Then in Python:
+
+```python
+result = subprocess.run(["node", "/tmp/script.cjs"], capture_output=True, text=True, env=env)
+with open("/tmp/actual_result.json") as f:
+    data = json.load(f)
+```
+
+- **Credential exposure blocking**: Passing `ACTUAL_PASSWORD` as a command-line argument can trigger terminal block ("BLOCKED: User denied"). Always pass credentials via the subprocess `env=` dict (Python) or by sourcing from an env file, never as a CLI flag or inline `-e` argument.
+- **Create ACTUAL_DATA_DIR before running**: The API will error with `ENOENT: no such file or directory, scandir` if the data directory doesn't exist. Always `os.makedirs(ACTUAL_DATA_DIR, exist_ok=True)` before invoking the Node script.
+- **`getBudgetMonth()` returns `categoryGroups`, NOT `categories`**: The `budget.categories` property is **empty** (0 keys). Monthly category data lives in `budget.categoryGroups[].categories[]`. Category rows use `budgeted`, `spent`, and `balance`, not `assigned`. Iterating `budget.categories` produces silently empty cash-flow results. Always extract from `categoryGroups`:
+```js
+const budgetByCatId = {};
+for (const group of (budget.categoryGroups || [])) {
+  for (const cat of (group.categories || [])) {
+    budgetByCatId[cat.id] = { budgeted: cat.budgeted, spent: cat.spent, balance: cat.balance, group: group.name };
+  }
+}
+```
+The `Budget Adjustment Workflow` section's `api.getBudgetMonth().categories` usage is WRONG for reading — use `categoryGroups` instead. Only `api.setBudgetAmount()` writes (and that works correctly).
+- **`getAccountBalance()` may diverge from `acct.balance_current`**: `getBalance()` returns the *cleared* balance (excluding pending), while `balance_current` includes pending transactions. For liabilities with significant pending activity they can differ. Always read BOTH and report both in snapshots. Use `getAccountBalance()` for the authoritative "what would pay off now" figure.
+- **`acct.type` key may be missing**: Some actual account objects returned by `getAccounts()` omit the `type` field. Fall back to inferring account type from the account `name` (e.g., contains "CHECKING", "SAVINGS", "MORTGAGE", "Loan", "Card") rather than assuming `type` will always be present.
