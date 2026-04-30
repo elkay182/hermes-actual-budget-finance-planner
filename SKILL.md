@@ -394,9 +394,33 @@ Rules:
 - Prefer user-confirmed Actual Budget debt categories for each card carrying debt.
 - Keep guidance educational; do not initiate card payments or creditor communications.
 
+## Critical Simulation Pitfall: Active Debt vs Passive Debt
+
+**NEVER** include 0% promotional accounts or the primary mortgage in the active attack pile of a debt payoff simulation. This produces mathematically wrong results — the simulation will waste extra payments on the mortgage or a 0% auto loan before touching high-interest revolving debt.
+
+**Correct approach:**
+1. Classify each debt as **active** (interest-bearing, non-mortgage, non-0%) or **passive** (0% promos, mortgage, 0% auto loans).
+2. Run the payoff simulation attacking ONLY active debts with the extra payment pool.
+3. Pay minimums on passive debts during the active phase.
+4. After all active debt clears, roll all freed minimum payments + the extra into the mortgage or passive accounts.
+
+**Example classification:**
+- Active: carried-revolving credit cards, unsecured personal loans
+- Passive: 0% promotional credit cards, 0% auto loans, primary mortgage
+
+A simulation that attacks all accounts uniformly will put the mortgage ahead of high-APR credit cards. Always filter.
+
 ## Debt Snowball / Avalanche Planner
 
 Debt snowball order: smallest balance first while paying minimums on all other debts. Avalanche order: highest APR first while paying minimums on all other debts. Produce both when APRs are known, and state the tradeoff plainly.
+
+Also offer these two additional methods when the user has dual goals (minimize interest AND improve cash flow quickly):
+
+**Cash Flow Index** — prioritize debts by (minimum_payment / original_balance) ratio. Eliminating a debt with a high ratio frees the most monthly cash per dollar invested. Best for users who want rapid monthly cash flow improvement.
+
+**DTI Impact** — prioritize by (balance × weight) where credit cards get weight=2, unsecured loans weight=1, secured debts weight=0.5. Best for users optimizing debt-to-income ratio for refinancing or qualification.
+
+See `[references/payoff-methods.md](references/payoff-methods.md)` for method definitions and cash flow index formulas.
 
 ```bash
 cat > /tmp/actual_debt_plan.cjs <<'JS'
@@ -432,63 +456,95 @@ function sortDebts(debts, orderMethod) {
   return live.sort((a, b) => (a.balance_cents - b.balance_cents) || (Number(b.apr ?? -1) - Number(a.apr ?? -1)));
 }
 
+function effectiveAPR(d, monthOffset) {
+  const simDate = new Date();
+  simDate.setUTCMonth(simDate.getUTCMonth() + monthOffset);
+  if (d.promo_end_date && new Date(d.promo_end_date) < simDate) return d.apr;
+  if (typeof d.promo_apr === 'number') return d.promo_apr;
+  return d.apr;
+}
+
 function simulate(inputDebts, monthlyExtra, orderMethod) {
-  const debts = inputDebts.map(d => ({ ...d }));
+  // CRITICAL: Split into active targets (interest-bearing, non-mortgage) and passive (min only)
+  // Paying mortgage or 0% accounts ahead of 22% credit cards is mathematically wrong.
+  const passive = inputDebts.filter(d =>
+    d.debt_type === 'mortgage' || (d.apr === 0 && !d.promo_apr)
+  );
+  const activeTargets = inputDebts.filter(d => !passive.includes(d));
+
+  const debts = activeTargets.map(d => ({ ...d }));
   const timeline = [];
   let month = 0;
   let totalInterest = 0;
 
+  // Phase 1: Attack active debts, passive pay minimums only
   while (debts.some(d => d.balance_cents > 0) && month < maxMonths) {
     month += 1;
 
     for (const d of debts) {
       if (d.balance_cents <= 0) continue;
-      const r = monthlyRate(d.apr);
-      if (r != null && r > 0) {
+      const r = effectiveAPR(d, month - 1) / 100 / 12;
+      if (r > 0) {
         const interest = Math.round(d.balance_cents * r);
         d.balance_cents += interest;
         totalInterest += interest;
       }
     }
 
-    const active = sortDebts(debts, orderMethod);
-    let pool = monthlyExtra + debts.reduce((sum, d) => sum + (d.balance_cents > 0 ? d.minimum_payment_cents : d.minimum_payment_cents || 0), 0);
-    const paidThisMonth = [];
+    const sorted = sortDebts(debts.filter(d => d.balance_cents > 0), orderMethod);
+    let pool = monthlyExtra;
 
-    for (const target of active) {
+    for (const target of sorted) {
       if (pool <= 0) break;
       const min = target.minimum_payment_cents || 0;
-      let pay = Math.min(target.balance_cents, min);
-      target.balance_cents -= pay;
-      pool -= pay;
-      paidThisMonth.push({ name: target.name, payment_cents: pay, priority: false });
+      pool -= min;
+      target.balance_cents -= min;
     }
 
     while (pool > 0) {
-      const priority = sortDebts(debts, orderMethod)[0];
+      const priority = sorted.find(d => d.balance_cents > 0);
       if (!priority) break;
       const pay = Math.min(priority.balance_cents, pool);
       priority.balance_cents -= pay;
       pool -= pay;
-      paidThisMonth.push({ name: priority.name, payment_cents: pay, priority: true });
     }
 
-    const newlyPaid = debts.filter(d => d.balance_cents === 0 && !d.paid_off_month);
+    const newlyPaid = debts.filter(d => d.balance_cents <= 0 && !d.paid_off_month);
     for (const d of newlyPaid) d.paid_off_month = month;
+
+    const clearedMins = debts.filter(d => d.paid_off_month).reduce((s, d) => s + d.minimum_payment_cents, 0);
 
     timeline.push({
       month,
       remaining_cents: debts.reduce((sum, d) => sum + Math.max(0, d.balance_cents), 0),
       paid_off: newlyPaid.map(d => d.name),
+      freed_minimum_cents: clearedMins,
     });
   }
 
+  // Phase 2: Roll all freed cash into mortgage (if present)
+  const mortgage = passive.find(d => d.debt_type === 'mortgage');
+  if (mortgage) {
+    const freedCash = debts.reduce((s, d) => s + d.minimum_payment_cents, 0);
+    const mortgagePayment = monthlyExtra + freedCash;
+    let mBal = mortgage.balance_cents;
+    while (mBal > 0 && month < maxMonths) {
+      month += 1;
+      mBal += Math.round(mBal * mortgage.apr / 100 / 12);
+      mBal -= mortgagePayment;
+    }
+    mortgage.paid_off_month = month;
+  }
+
+  const allDebts = [...debts, ...passive.map(p => ({ ...p, paid_off_month: (p.apr === 0 && !p.promo_apr) ? null : p.paid_off_month }))];
+
   return {
     method: orderMethod,
+    active_clear_month: month,
     months: month,
     total_interest_cents: totalInterest,
-    payoff_order: debts
-      .slice()
+    payoff_order: allDebts
+      .filter(d => d.paid_off_month || d.apr === 0)
       .sort((a, b) => (a.paid_off_month || 9999) - (b.paid_off_month || 9999))
       .map(d => ({ name: d.name, paid_off_month: d.paid_off_month || null })),
     timeline: timeline.filter(row => row.paid_off.length > 0 || row.month % 6 === 0 || row.remaining_cents === 0),
@@ -797,12 +853,46 @@ After any write operation:
 - Show before/after values.
 - State that Actual Budget was updated, but no external bank/lender action occurred.
 
+## Hermes-Specific Terminal Tips
+
+When running scripts from Hermes's terminal tool:
+- **Always write Node.js to a `.cjs` file first**, then execute it. Inline `-e` scripts with `@actual-app/api` regularly time out because `downloadBudget()` and `sync()` need extra seconds to fetch and sync data from the server — the terminal's timeout limit may fire before the async work completes.
+- Use a generous `timeout` (60–120s) on `terminal` calls that run actual-budget scripts.
+- API breadcrumbs (sync messages) go to stderr; JSON output goes to stdout. Both appear in the terminal output — parse the JSON object at the end, not the breadcrumbs at the beginning.
+- Always call `api.shutdown()` in a `finally` block to release the in-memory database lock, even on errors.
+
+## Due Date Inference
+
+Actual Budget does not store due dates natively. When the sidecar's `due_day` is null or stale, infer it from transaction history rather than guessing. See `references/session-due-date-inference.md` for worked examples.
+
+1. Pull 6+ months of transactions for each debt account.
+2. Filter for inbound (positive amount) transactions — these are payments made TO the account.
+3. Count the distribution of calendar days (`new Date(t.date).getDate()`).
+4. The most frequent day is the inferred due date (or payment day, which typically aligns with or slightly precedes the due date).
+
+```js
+const payments = txns.filter(t => t.amount > 0).map(t => t.date.slice(8, 10)); // day of month
+const dayCounts = {};
+payments.forEach(d => { dayCounts[d] = (dayCounts[d] || 0) + 1; });
+const sortedDays = Object.entries(dayCounts).sort((a, b) => b[1] - a[1]);
+const inferredDueDay = sortedDays[0][0]; // most frequent payment day
+```
+
+**Edge cases:**
+- Zero payment transactions (e.g., user pays outside of tracked accounts): ask the user directly.
+- Multiple consistent payment days: the earliest one is likely the due date, later ones are catch-up payments.
+- Payments on variable days across months: the account likely has a statement-cycle due date rather than a fixed calendar day.
+
 ## Common Pitfalls
 
 - Actual Budget automation is via `@actual-app/api`, not a REST API.
+- Terminal timeout gotchas: **always write Node.js to a `.cjs` file first**, *not inline with `\-e`*. The `downloadBudget()` fetch + `sync()` roundtrip easily exceeds inline timeouts. Execute via `node /path/to/script.cjs`.
 - Amounts are integer minor units. Do not write decimal dollar amounts directly to `setBudgetAmount`, transactions, or balances.
 - `importTransactions` deduplicates and runs rules; `addTransactions` does not.
 - Existing transfer `transfer_id` values should not be changed.
 - Account `type` is metadata and may not fully indicate whether the account should be treated as debt.
 - APR, minimum payment, and due date usually require user-provided data or a sidecar profile.
 - Do not over-optimize a payoff plan if the budget has uncategorized transactions or stale balances.
+- **Never use `node -e "..."` for Actual Budget scripts** — inline eval scripts consistently timeout on this host. Always write the script to a `/tmp/` file and execute it with `node /tmp/script.cjs`.
+- **Always set `ACTUAL_DATA_DIR`** even if the default works — explicit paths prevent stale cache conflicts when multiple sessions run the API.
+- **Handle zero-payment accounts gracefully** — not all debt accounts will have payment history (user may pay externally). Do not crash on `sortedDays[0]` being undefined; log "NO payment transactions found" and flag for user input.
