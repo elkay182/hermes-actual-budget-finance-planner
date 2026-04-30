@@ -15,6 +15,7 @@ This skill helps Hermes perform read-only financial analysis by default, classif
   - Cash Flow Index (CFI)
   - debt-ratio / DTI impact
   - custom manual priority
+  - Actual-specific credit-card carrying-debt handling
 - Provides LLM-assisted categorization workflows:
   - classify uncategorized transactions with an LLM
   - dry-run before applying changes
