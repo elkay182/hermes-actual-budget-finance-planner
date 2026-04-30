@@ -379,6 +379,21 @@ Rules for the sidecar:
 - If APR is missing, still produce a snowball order by balance, but label interest estimates unavailable.
 - If promo APR expiration is known, flag deadlines before recommending snowball order blindly.
 
+## Credit Card Debt in Actual Budget
+
+When planning credit-card payoff for carried debt, align recommendations with Actual Budget's carrying-debt workflow: https://actualbudget.org/docs/budgeting/credit-cards/carrying-debt/
+
+Rules:
+
+- Treat carried credit-card debt as distinct from cards that are paid in full within the budget.
+- Fund necessary spending categories before recommending extra payoff toward carried debt.
+- Use absolute values when interpreting negative credit-card account balances for payoff planning.
+- Require statement minimum payment, interest and fees, new purchases, and return credits before calculating payment guidance.
+- Track interest and fees as debt-category activity when relevant.
+- Do not double-count debt by subtracting both negative card balances and debt-category balances from the same available funds.
+- Prefer user-confirmed Actual Budget debt categories for each card carrying debt.
+- Keep guidance educational; do not initiate card payments or creditor communications.
+
 ## Debt Snowball / Avalanche Planner
 
 Debt snowball order: smallest balance first while paying minimums on all other debts. Avalanche order: highest APR first while paying minimums on all other debts. Produce both when APRs are known, and state the tradeoff plainly.
