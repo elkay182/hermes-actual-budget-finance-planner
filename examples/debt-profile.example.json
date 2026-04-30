@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "grossMonthlyIncome": 0,
+  "grossMonthlyIncome": null,
   "preferredStrategy": "compare",
-  "extraMonthlyPayment": 0,
-  "minimumCashBuffer": 1000,
+  "extraMonthlyPayment": null,
+  "minimumCashBuffer": null,
   "debts": [
     {
       "name": "Example Credit Card",
       "actualAccountId": "optional-actual-account-id",
-      "balance": 0,
-      "minimumPayment": 0,
-      "apr": 0.2499,
-      "promoApr": 0,
+      "balance": null,
+      "minimumPayment": null,
+      "apr": null,
+      "promoApr": null,
       "promoEndsOn": "YYYY-MM-DD",
-      "dueDay": 1,
+      "dueDay": null,
       "paymentType": "revolving",
       "notes": "Replace this example with real debt metadata. Do not commit real private data."
     }

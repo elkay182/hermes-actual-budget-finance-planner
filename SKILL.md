@@ -118,7 +118,7 @@ function cents(decimalAmount) {
 }
 ```
 
-Actual stores currency amounts as integers with no decimal places. In USD-style currencies, `$120.30` is represented as `12030`. Dates are `YYYY-MM-DD`; months are `YYYY-MM`.
+Actual stores currency amounts as integers with no decimal places. In USD-style currencies, store a dollar amount as integer cents, not as a decimal string. Dates are `YYYY-MM-DD`; months are `YYYY-MM`.
 
 ## Read-Only Financial Snapshot
 
@@ -306,7 +306,7 @@ Recommended sidecar shape:
     {
       "transaction_id": "actual-transaction-id-placeholder",
       "date": "YYYY-MM-DD",
-      "amount_cents": 0,
+      "amount_cents": null,
       "imported_payee": "Example Merchant",
       "current_category": null,
       "suggested_category": "Example Category",
@@ -350,8 +350,8 @@ mkdir -p .hermes/state
 cat > .hermes/state/actual-debt-profile.example.json <<'JSON'
 {
   "currency": "USD",
-  "monthly_extra_debt_payment_cents": 0,
-  "minimum_emergency_cash_cents": 100000,
+  "monthly_extra_debt_payment_cents": null,
+  "minimum_emergency_cash_cents": null,
   "debts": [
     {
       "account_name": "Example Credit Card",

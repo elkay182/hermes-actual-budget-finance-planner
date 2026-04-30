@@ -67,7 +67,7 @@ export ACTUAL_DEBT_PROFILE="$HOME/.hermes/state/actual-debt-profile.json"
 export ACTUAL_AI_REVIEW_PATH="$HOME/.hermes/state/actual-llm-review.json"
 export ACTUAL_AI_BASE_URL="http://localhost:11434/v1"
 export ACTUAL_AI_API_KEY="replace-me"
-export ACTUAL_AI_MODEL="qwen3.5:9b"
+export ACTUAL_AI_MODEL="replace-me"
 ```
 
 See [`examples/env.example`](examples/env.example).
